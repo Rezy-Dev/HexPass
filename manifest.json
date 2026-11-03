@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "rezydev.hexpass",
+  "name": "HexPass",
+  "version": "1.0.0",
+  "author": "Rezy Dev",
+  "license": "MIT",
+  "homepage": "https://rezydev.com/",
+  "description": "gopass in the Omarchy bar: search, copy, generate, edit, and sync.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "HexPass",
+    "description": "Your gopass store in the bar. Search, copy passwords and codes, generate new ones, and sync with git.",
+    "category": "Security",
+    "aliases": [
+      "gopass",
+      "passwords",
+      "password manager",
+      "secrets",
+      "otp",
+      "totp",
+      "git"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "syncOnOpen": false,
+      "clipboardClear": 45,
+      "genLength": 24,
+      "genSymbols": true,
+      "genMode": "cryptic"
+    },
+    "schema": [
+      {
+        "key": "syncOnOpen",
+        "type": "boolean",
+        "label": "Sync on open",
+        "defaultValue": false,
+        "description": "Pull from git when the panel opens."
+      },
+      {
+        "key": "clipboardClear",
+        "type": "integer",
+        "label": "Clear clipboard after (seconds)",
+        "defaultValue": 45,
+        "min": 0,
+        "max": 300,
+        "step": 15,
+        "description": "0 keeps the copied value on the clipboard."
+      },
+      {
+        "key": "genLength",
+        "type": "integer",
+        "label": "Default password length",
+        "defaultValue": 24,
+        "min": 8,
+        "max": 128,
+        "step": 1
+      },
+      {
+        "key": "genSymbols",
+        "type": "boolean",
+        "label": "Use symbols by default",
+        "defaultValue": true
+      },
+      {
+        "key": "genMode",
+        "type": "enum",
+        "label": "Generator style",
+        "options": [
+          "cryptic",
+          "xkcd",
+          "memorable"
+        ],
+        "defaultValue": "cryptic"
+      }
+    ]
+  }
+}
