@@ -40,6 +40,7 @@ omarchy plugin remove rezydev.hexpass
 - `gopass` in `PATH`.
 - `git` for sync.
 - `wl-clipboard` for copying.
+- Omarchy's terminal launcher for fsck, audit, and doctor.
 
 gopass uses your normal gpg-agent or age setup.
 
