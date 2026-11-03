@@ -34,6 +34,25 @@ The git remote uses SSH, so make sure your key is loaded (`ssh-add -l`).
 omarchy plugin remove rezydev.hexpass
 ```
 
+## Requirements
+
+- Omarchy 4 with the Quickshell shell.
+- `gopass` in `PATH`.
+- `git` for sync.
+- `wl-clipboard` for copying.
+
+gopass uses your normal gpg-agent or age setup.
+
+## Notes
+
+- Runs as your user. No sudo.
+- Settings live on the HexPass entry in `~/.config/omarchy/shell.json` and only change when you click a setting.
+- `./install.sh` replaces only `~/.config/omarchy/plugins/rezydev.hexpass`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
 ## Credit
 
 [rezydev.com](https://rezydev.com/)
