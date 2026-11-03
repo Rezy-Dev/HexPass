@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -13,7 +12,6 @@ Panel {
 
   moduleName: "rezydev.hexpass"
   ipcTarget: "rezydev.hexpass"
-  manageIpc: false
 
   implicitWidth: barSlot.implicitWidth
   implicitHeight: barSlot.implicitHeight
@@ -425,19 +423,6 @@ Panel {
 
   GopassController {
     id: controller
-  }
-
-  IpcHandler {
-    target: root.ipcTarget
-
-    function open() { root.open() }
-    function close() { root.close() }
-    function show() { root.open() }
-    function hide() { root.close() }
-    function toggle() { root.toggle() }
-    function refresh() { controller.refresh(); controller.refreshGit() }
-    function sync() { controller.sync() }
-    function copyPassword(path: string) { controller.copyPassword(path) }
   }
 
   Connections {
