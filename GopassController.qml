@@ -195,6 +195,25 @@ Item {
     })
   }
 
+  function deleteFolder(path, callback) {
+    if (!path) return
+    deleting = true
+    enqueue([gopass, "--yes", "delete", "--force", "--recursive", path], function(code, output, stderr) {
+      root.deleting = false
+      if (code === 0) {
+        root.notice("Deleted " + path, false)
+        if (root.detailPath === path || root.detailPath.indexOf(path + "/") === 0)
+          root.clearDetail()
+        root.refresh()
+        root.refreshGit()
+        if (callback) callback(true)
+        return
+      }
+      root.notice(Model.cleanError(stderr) || "Could not delete folder", true)
+      if (callback) callback(false)
+    })
+  }
+
   function sync(callback) {
     if (syncing) return
     syncing = true

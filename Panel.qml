@@ -33,6 +33,8 @@ Panel {
   property bool settingsOpen: false
   property bool deleteOpen: false
   property string pendingDelete: ""
+  property string deleteMode: "entry"
+  property int pendingDeleteCount: 0
   property bool pendingEdit: false
   property string pendingSelectPath: ""
 
@@ -72,6 +74,24 @@ Panel {
   readonly property bool detailLoading: controller.detailLoading && controller.detailPath === selectedPath
   readonly property string detailError: controller.detailPath === selectedPath ? controller.detailError : ""
   readonly property var otp: controller.otp && controller.otp.path === selectedPath ? controller.otp : null
+  readonly property string selectedFolder: detail ? detail.folder : (selectedRow ? selectedRow.folder : "")
+  readonly property bool canDeleteFolder: {
+    var folder = selectedFolder
+    if (!folder || folder.split("/").length < 2) return false
+    return selectedFolderCount > 1
+  }
+  readonly property int selectedFolderCount: {
+    var folder = selectedFolder
+    if (!folder) return 0
+
+    var prefix = folder + "/"
+    var count = 0
+    var list = controller.entries
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i]).indexOf(prefix) === 0) count++
+    }
+    return count
+  }
 
   // ------------------------------------------------------------------ setup
 
@@ -294,7 +314,19 @@ Panel {
 
   function requestDelete() {
     if (!selectedPath) return
+    deleteMode = "entry"
     pendingDelete = selectedPath
+    pendingDeleteCount = 1
+    deleteOpen = true
+    deleteDialog.selectedIndex = 0
+    Qt.callLater(function() { deleteDialog.forceActiveFocus() })
+  }
+
+  function requestDeleteFolder() {
+    if (!canDeleteFolder) return
+    deleteMode = "folder"
+    pendingDelete = selectedFolder
+    pendingDeleteCount = selectedFolderCount
     deleteOpen = true
     deleteDialog.selectedIndex = 0
     Qt.callLater(function() { deleteDialog.forceActiveFocus() })
@@ -302,18 +334,24 @@ Panel {
 
   function confirmDelete() {
     var path = pendingDelete
+    var mode = deleteMode
     deleteOpen = false
     pendingDelete = ""
+    pendingDeleteCount = 0
     if (!path) return
-    controller.deleteEntry(path, function(ok) {
+
+    var done = function(ok) {
       if (ok) pendingSelectPath = ""
       refocus()
-    })
+    }
+    if (mode === "folder") controller.deleteFolder(path, done)
+    else controller.deleteEntry(path, done)
   }
 
   function cancelDelete() {
     deleteOpen = false
     pendingDelete = ""
+    pendingDeleteCount = 0
     refocus()
   }
 
@@ -966,6 +1004,51 @@ Panel {
                     onCopyRequested: controller.copyValue(modelData.value, modelData.label)
                   }
                 }
+
+                Item {
+                  width: parent.width
+                  height: visible ? actionRow.implicitHeight + Style.spacing.md : 0
+                  visible: root.detail !== null
+
+                  Row {
+                    id: actionRow
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.spacing.sm
+
+                    Button {
+                      iconText: "\uf044"
+                      text: "Edit"
+                      foreground: root.foreground
+                      accent: root.accent
+                      fontFamily: root.fontFamily
+                      bordered: true
+                      onClicked: root.openEditForm()
+                    }
+
+                    Button {
+                      iconText: "\uf1f8"
+                      text: "Delete"
+                      foreground: root.urgent
+                      accent: root.urgent
+                      fontFamily: root.fontFamily
+                      bordered: true
+                      onClicked: root.requestDelete()
+                    }
+
+                    Button {
+                      iconText: "\uf1f8"
+                      text: "Delete folder (" + root.selectedFolderCount + ")"
+                      visible: root.canDeleteFolder
+                      width: visible ? implicitWidth : 0
+                      foreground: root.urgent
+                      accent: root.urgent
+                      fontFamily: root.fontFamily
+                      bordered: true
+                      onClicked: root.requestDeleteFolder()
+                    }
+                  }
+                }
               }
             }
           }
@@ -980,7 +1063,7 @@ Panel {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, parent.width - creditText.width - (gitText.visible ? gitText.width : 0) - Style.spacing.xxl * 2)
-            text: "\u21b5 copy   ^N new   ^G generate   ^S sync"
+            text: "\u21b5 copy   ^N new   ^G generate   ^S sync   ^D delete"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -1118,8 +1201,11 @@ Panel {
         z: 20
         opened: root.deleteOpen
         message: root.pendingDelete
-          ? "Delete " + (root.selectedRow ? root.selectedRow.title : root.pendingDelete)
-            + "?\n" + root.pendingDelete
+          ? (root.deleteMode === "folder"
+            ? "Delete folder " + root.pendingDelete + "?\nThis removes "
+              + root.pendingDeleteCount + " entries."
+            : "Delete " + (root.selectedRow ? root.selectedRow.title : root.pendingDelete)
+              + "?\n" + root.pendingDelete)
           : ""
         confirmText: "Delete"
         background: Color.popups.background

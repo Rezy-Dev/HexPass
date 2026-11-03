@@ -1,9 +1,9 @@
 import QtQuick
 import Quickshell.Io
 
-// A Process that only reports once the exit code and both output streams are
-// in. Quickshell does not guarantee exit and stream-finished ordering, and
-// every gopass read here needs the complete stdout.
+// A Process that reports after the exit code and a short drain window. The
+// drain matters because Quickshell does not guarantee that stream-finished
+// lands before exited, and every gopass read here needs the complete stdout.
 Item {
   id: root
 
@@ -18,16 +18,12 @@ Item {
   signal finished(int exitCode, string stdout, string stderr)
 
   property int _exitCode: -1
-  property bool _outDone: false
-  property bool _errDone: false
   property bool _exited: false
   property string _pendingStdin: ""
 
   function start(command, payload) {
     if (proc.running) return false
     _exitCode = -1
-    _outDone = false
-    _errDone = false
     _exited = false
     _pendingStdin = payload === undefined || payload === null ? "" : String(payload)
 
@@ -41,21 +37,6 @@ Item {
     proc.running = false
   }
 
-  function _maybeFinish() {
-    if (!_exited || !_outDone || !_errDone) return
-
-    var code = _exitCode
-    var output = out.text
-    var errors = err.text
-    _exitCode = -1
-    _outDone = false
-    _errDone = false
-    _exited = false
-    _pendingStdin = ""
-
-    finished(code, output, errors)
-  }
-
   Process {
     id: proc
     command: []
@@ -64,19 +45,11 @@ Item {
     stdout: StdioCollector {
       id: out
       waitForEnd: true
-      onStreamFinished: {
-        root._outDone = true
-        root._maybeFinish()
-      }
     }
 
     stderr: StdioCollector {
       id: err
       waitForEnd: true
-      onStreamFinished: {
-        root._errDone = true
-        root._maybeFinish()
-      }
     }
 
     onStarted: {
@@ -90,7 +63,22 @@ Item {
       proc.running = false
       root._exitCode = exitCode
       root._exited = true
-      root._maybeFinish()
+      drainTimer.restart()
+    }
+  }
+
+  Timer {
+    id: drainTimer
+    interval: 100
+    repeat: false
+    onTriggered: {
+      if (!root._exited) return
+      var code = root._exitCode
+      var output = out.text
+      var errors = err.text
+      root._exitCode = -1
+      root._exited = false
+      root.finished(code, output, errors)
     }
   }
 }

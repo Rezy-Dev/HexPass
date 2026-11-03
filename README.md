@@ -7,7 +7,7 @@ A gopass manager for the Omarchy bar.
 - Search every entry in your gopass store.
 - Copy passwords, usernames, URLs, and TOTP codes.
 - Reveal passwords in place.
-- Add, edit, and delete entries.
+- Add, edit, and delete entries or an entire app folder.
 - Generate passwords with gopass (cryptic, XKCD, memorable).
 - Sync with git and refresh changes made on another device.
 - Show branch, ahead/behind, and dirty state.
