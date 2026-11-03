@@ -789,13 +789,12 @@ Panel {
 
                 Item {
                   width: parent.width
-                  height: Math.max(pathText.implicitHeight, pathActions.implicitHeight)
+                  height: pathText.implicitHeight
 
                   Text {
                     id: pathText
                     anchors.left: parent.left
-                    anchors.right: pathActions.left
-                    anchors.rightMargin: Style.spacing.sm
+                    anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.selectedPath !== ""
                     text: root.selectedPath
@@ -803,33 +802,6 @@ Panel {
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideMiddle
-                  }
-
-                  Row {
-                    id: pathActions
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.spacing.xxs
-
-                    PanelActionButton {
-                      visible: root.detail !== null
-                      iconText: "\uf044"
-                      tooltipText: "Edit"
-                      foreground: root.foreground
-                      hoverColor: root.accent
-                      fontFamily: root.fontFamily
-                      onClicked: root.openEditForm()
-                    }
-
-                    PanelActionButton {
-                      visible: root.selectedPath !== ""
-                      iconText: "\uf1f8"
-                      tooltipText: "Delete"
-                      foreground: root.foreground
-                      hoverColor: root.urgent
-                      fontFamily: root.fontFamily
-                      onClicked: root.requestDelete()
-                    }
                   }
                 }
 
