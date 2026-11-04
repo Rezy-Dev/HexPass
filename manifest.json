@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "rezydev.hexpass",
   "name": "HexPass",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "Rezy Dev",
   "license": "MIT",
   "homepage": "https://rezydev.com/",
@@ -30,6 +30,8 @@
     "defaultSection": "right",
     "defaults": {
       "syncOnOpen": false,
+      "autoUnlock": true,
+      "autoLockSeconds": 900,
       "clipboardClear": 45,
       "genLength": 24,
       "genSymbols": true,
@@ -42,6 +44,23 @@
         "label": "Sync on open",
         "defaultValue": false,
         "description": "Pull from git when the panel opens."
+      },
+      {
+        "key": "autoUnlock",
+        "type": "boolean",
+        "label": "Unlock on open",
+        "defaultValue": true,
+        "description": "Use gpg-agent to unlock when the panel opens."
+      },
+      {
+        "key": "autoLockSeconds",
+        "type": "integer",
+        "label": "Lock after (seconds, 0 = never)",
+        "defaultValue": 900,
+        "min": 0,
+        "max": 86400,
+        "step": 300,
+        "description": "Clears the plugin state, clipboard, and gpg-agent cache."
       },
       {
         "key": "clipboardClear",

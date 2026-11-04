@@ -12,7 +12,19 @@ A gopass manager for the Omarchy bar.
 - Sync with git and refresh changes made on another device.
 - Show branch, ahead/behind, and dirty state.
 - Clear the clipboard automatically.
+- Lock and unlock with gpg-agent.
+- Auto-lock after 15 minutes by default.
 - Run fsck, audit, and doctor from settings.
+
+## Security
+
+- HexPass never stores your passphrase. Unlock goes through gpg-agent/pinentry.
+- Lock clears decrypted panel state, the clipboard, and the gpg-agent cache.
+- Auto-unlock uses the agent cache; auto-lock is configurable.
+- Copied secrets go to `wl-copy` over stdin, never as process arguments.
+- Settings live on the HexPass entry in `~/.config/omarchy/shell.json`.
+- To keep the agent cache longer, set `default-cache-ttl` / `max-cache-ttl` in
+  `~/.gnupg/gpg-agent.conf`. HexPass does not modify that file.
 
 ## Install
 

@@ -40,6 +40,12 @@ Item {
   property bool saving: false
   property bool deleting: false
 
+  property bool locked: true
+  property bool unlocking: false
+  property string lockError: ""
+  property bool pendingUnlock: false
+  property int autoLockSeconds: 900
+
   property string storePath: ""
   property int gitRunningCount: 0
   property bool gitQueued: false
@@ -65,6 +71,76 @@ Item {
     refreshGit()
     if (syncOnOpen) sync()
     else refresh()
+  }
+
+  function unlock() {
+    if (!locked || unlocking) return
+
+    lockError = ""
+    unlocking = true
+
+    if (entries.length === 0) {
+      pendingUnlock = true
+      refresh()
+      return
+    }
+
+    unlockWithEntry(entries[0])
+  }
+
+  function unlockWithEntry(path) {
+    if (!path) {
+      unlocking = false
+      locked = false
+      return
+    }
+    unlockProc.start([gopass, "show", "--nosync", "--password", "--unsafe", path])
+  }
+
+  function softLock() {
+    locked = true
+    unlocking = false
+    pendingUnlock = false
+    lockError = ""
+    lockTimer.stop()
+    clearDetail()
+    entries = []
+    generated = ""
+    listLoading = false
+    listError = ""
+    listChanged()
+
+    detailProc.stop()
+    otpProc.stop()
+    readProc.stop()
+    unlockProc.stop()
+    readRunning = false
+    readCallback = null
+    readQueue = []
+  }
+
+  function lock(clearAgent) {
+    softLock()
+    clearClipboardNow()
+    if (clearAgent) Quickshell.execDetached(["gpgconf", "--kill", "gpg-agent"])
+    notice("Locked", false)
+  }
+
+  function clearClipboardNow() {
+    pendingClipboardText = ""
+    lastClipboard = ""
+    clipboardTimer.stop()
+    clipboardCopyProc.stop()
+    Quickshell.execDetached(["wl-copy", "--clear"])
+  }
+
+  function startLockTimer() {
+    if (autoLockSeconds > 0) {
+      lockTimer.interval = autoLockSeconds * 1000
+      lockTimer.restart()
+    } else {
+      lockTimer.stop()
+    }
   }
 
   function refresh() {
@@ -271,6 +347,8 @@ Item {
   }
 
   function copyValue(value, label) {
+    if (locked) return false
+
     var text = String(value || "")
     if (!text) {
       notice("Nothing to copy", true)
@@ -483,13 +561,41 @@ Item {
 
     onFinished: function(code, output, stderr) {
       root.listLoading = false
+
+      if (root.locked && !root.pendingUnlock) {
+        root.entries = []
+        root.listQueued = false
+        return
+      }
+
       if (code !== 0) {
         root.listError = Model.cleanError(stderr) || "Could not list entries"
-        root.notice(root.listError, true)
+        if (root.pendingUnlock) {
+          root.pendingUnlock = false
+          root.unlocking = false
+          root.lockError = root.listError
+        } else {
+          root.notice(root.listError, true)
+        }
       } else {
         root.entries = Model.parseList(output)
         root.listError = ""
         root.listChanged()
+      }
+
+      if (root.pendingUnlock) {
+        root.pendingUnlock = false
+        if (code === 0 && root.entries.length > 0) {
+          root.unlockWithEntry(root.entries[0])
+        } else if (code === 0) {
+          root.unlocking = false
+          root.locked = false
+          root.notice("Store is empty", false)
+        } else {
+          root.unlocking = false
+          root.locked = true
+          root.lockError = root.listError
+        }
       }
 
       if (root.listQueued) {
@@ -504,6 +610,7 @@ Item {
 
     onFinished: function(code, output, stderr) {
       root.detailLoading = false
+      if (root.locked) return
 
       if (root.detailStartedPath !== root.detailPath) {
         if (root.detailPath) {
@@ -536,6 +643,13 @@ Item {
     id: readProc
 
     onFinished: function(code, output, stderr) {
+      if (root.locked) {
+        root.readCallback = null
+        root.readRunning = false
+        root.readQueue = []
+        return
+      }
+
       var callback = root.readCallback
       root.readCallback = null
       root.readRunning = false
@@ -553,6 +667,7 @@ Item {
 
     onFinished: function(code, output, stderr) {
       root.otpLoading = false
+      if (root.locked) return
 
       if (root.otpStartedPath === root.otpPath) {
         var callback = root.otpCurrentCallback
@@ -673,9 +788,40 @@ Item {
   }
 
   GopassProcess {
+    id: unlockProc
+    discardStdout: true
+
+    onFinished: function(code, output, stderr) {
+      if (!root.unlocking) return
+
+      root.unlocking = false
+      if (code === 0) {
+        root.locked = false
+        root.lockError = ""
+        root.startLockTimer()
+        root.notice("Unlocked", false)
+        root.refresh()
+        root.refreshGit()
+      } else {
+        root.locked = true
+        root.lockError = Model.cleanError(stderr) || "Could not unlock"
+        root.entries = []
+        root.listChanged()
+      }
+    }
+  }
+
+  Timer {
+    id: lockTimer
+    repeat: false
+    onTriggered: root.lock(true)
+  }
+
+  GopassProcess {
     id: clipboardCopyProc
 
     onFinished: function(code, output, stderr) {
+      if (root.locked) return
       if (root.pendingClipboardText) {
         root.startClipboardCopy()
         return

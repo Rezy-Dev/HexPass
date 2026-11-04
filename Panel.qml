@@ -54,6 +54,13 @@ Panel {
     return value === true || value === "true" || value === 1 || value === "1"
   }
   readonly property int clipboardClear: Model.clipboardSeconds(setting("clipboardClear", 45))
+  readonly property bool autoUnlock: setting("autoUnlock", true) !== false
+  readonly property int autoLockSeconds: {
+    var value = Number(setting("autoLockSeconds", 900))
+    if (!isFinite(value) || value < 0) return 900
+    return Math.min(86400, Math.round(value))
+  }
+  readonly property bool locked: controller.locked
   readonly property int defaultLength: clampLength(setting("genLength", 24))
   readonly property bool defaultSymbols: setting("genSymbols", true) !== false
   readonly property string defaultMode: {
@@ -97,6 +104,7 @@ Panel {
 
   Component.onCompleted: {
     controller.clipboardClearSeconds = clipboardClear
+    controller.autoLockSeconds = autoLockSeconds
     genLength = defaultLength
     genSymbols = defaultSymbols
     genMode = defaultMode
@@ -119,12 +127,24 @@ Panel {
       pendingSelectPath = ""
 
       controller.clipboardClearSeconds = clipboardClear
+      controller.autoLockSeconds = autoLockSeconds
       genLength = defaultLength
       genSymbols = defaultSymbols
       genMode = defaultMode
-      controller.activate(syncOnOpen)
+
+      if (controller.locked) {
+        controller.refreshGit()
+        if (autoUnlock) controller.unlock()
+        else {
+          controller.unlocking = false
+          controller.lockError = ""
+        }
+      } else {
+        controller.activate(syncOnOpen)
+      }
+
       refocus()
-      scheduleDetail()
+      if (!controller.locked) scheduleDetail()
     } else {
       formOpen = false
       generatorOpen = false
@@ -132,12 +152,14 @@ Panel {
       deleteOpen = false
       pendingDelete = ""
       pendingEdit = false
-      controller.clearDetail()
+      controller.softLock()
     }
   }
 
   onSettingsChanged: {
     controller.clipboardClearSeconds = clipboardClear
+    controller.autoLockSeconds = autoLockSeconds
+    if (!controller.locked) controller.startLockTimer()
   }
 
   onVisibleEntriesChanged: clampCursor()
@@ -162,13 +184,14 @@ Panel {
   }
 
   function scheduleDetail() {
-    detailTimer.restart()
+    if (!locked) detailTimer.restart()
   }
 
   function refocus() {
     Qt.callLater(function() {
       if (!root.opened) return
-      if (root.formOpen) form.focusField(0)
+      if (root.locked) content.forceActiveFocus()
+      else if (root.formOpen) form.focusField(0)
       else if (root.generatorOpen) generator.forceActiveFocus()
       else if (root.settingsOpen) settingsView.forceActiveFocus()
       else searchField.forceActiveFocus()
@@ -404,6 +427,36 @@ Panel {
     persist({ syncOnOpen: !syncOnOpen })
   }
 
+  function toggleAutoUnlock() {
+    persist({ autoUnlock: !autoUnlock })
+  }
+
+  function cycleAutoLock() {
+    var options = [300, 900, 1800, 3600, 0]
+    var index = options.indexOf(autoLockSeconds)
+    var next = options[(index + 1) % options.length]
+    persist({ autoLockSeconds: next })
+    controller.autoLockSeconds = next
+    if (!controller.locked) controller.startLockTimer()
+  }
+
+  function lockLabel() {
+    if (autoLockSeconds === 0) return "Never"
+    if (autoLockSeconds === 300) return "5 min"
+    if (autoLockSeconds === 900) return "15 min"
+    if (autoLockSeconds === 1800) return "30 min"
+    if (autoLockSeconds === 3600) return "1 hour"
+    return autoLockSeconds + "s"
+  }
+
+  function lockNow() {
+    controller.lock(true)
+  }
+
+  function syncNow() {
+    controller.sync()
+  }
+
   function openCredit() {
     Quickshell.execDetached(["xdg-open", "https://rezydev.com/"])
   }
@@ -420,7 +473,7 @@ Panel {
   // ---------------------------------------------------------------- keyboard
 
   function handleSearchKey(event) {
-    if (formOpen || generatorOpen || settingsOpen || deleteOpen) return
+    if (locked || formOpen || generatorOpen || settingsOpen || deleteOpen) return
 
     if (event.key === Qt.Key_Escape) {
       if (filter) clearFilter()
@@ -480,6 +533,22 @@ Panel {
         if (root.detail) Qt.callLater(root.openEditForm)
       }
     }
+
+    function onLockedChanged() {
+      if (root.locked) {
+        root.formOpen = false
+        root.generatorOpen = false
+        root.settingsOpen = false
+        root.deleteOpen = false
+        root.pendingDelete = ""
+        root.pendingEdit = false
+        root.pendingSelectPath = ""
+        root.revealPassword = false
+        root.notice = ""
+      }
+      root.refocus()
+      if (!root.locked) root.scheduleDetail()
+    }
   }
 
   Timer {
@@ -528,6 +597,16 @@ Panel {
           return
         }
         if (root.formOpen || root.generatorOpen || root.settingsOpen) return
+        if (root.locked) {
+          if (event.key === Qt.Key_Escape) {
+            root.close()
+            event.accepted = true
+          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            controller.unlock()
+            event.accepted = true
+          }
+          return
+        }
         if (event.key === Qt.Key_Escape) {
           if (root.filter) root.clearFilter()
           else root.close()
@@ -577,9 +656,11 @@ Panel {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: root.filter
-                ? root.visibleEntries.length + "/" + controller.entries.length
-                : String(controller.entries.length)
+              text: root.locked
+                ? "locked"
+                : (root.filter
+                  ? root.visibleEntries.length + "/" + controller.entries.length
+                  : String(controller.entries.length))
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -593,6 +674,7 @@ Panel {
             spacing: Style.spacing.xxs
 
             PanelActionButton {
+              visible: !root.locked
               iconText: "\uf067"
               tooltipText: "New entry"
               foreground: root.foreground
@@ -602,6 +684,7 @@ Panel {
             }
 
             PanelActionButton {
+              visible: !root.locked
               iconText: "\uf0d0"
               tooltipText: "Generate"
               foreground: root.foreground
@@ -611,12 +694,23 @@ Panel {
             }
 
             PanelActionButton {
+              visible: !root.locked
               iconText: controller.syncing ? "\uf110" : "\uf021"
               tooltipText: controller.remote ? "Sync with " + controller.remote : "Sync with git"
               foreground: controller.syncing ? root.accent : root.foreground
               hoverColor: root.accent
               fontFamily: root.fontFamily
               onClicked: controller.sync()
+            }
+
+            PanelActionButton {
+              visible: !root.locked
+              iconText: "\uf023"
+              tooltipText: "Lock now"
+              foreground: root.foreground
+              hoverColor: root.urgent
+              fontFamily: root.fontFamily
+              onClicked: root.lockNow()
             }
 
             PanelActionButton {
@@ -638,6 +732,8 @@ Panel {
           id: searchField
 
           Layout.fillWidth: true
+          Layout.preferredHeight: visible ? implicitHeight : 0
+          visible: !root.locked
           placeholderText: "Search"
           foreground: root.foreground
           accent: root.accent
@@ -665,6 +761,7 @@ Panel {
         RowLayout {
           Layout.fillWidth: true
           Layout.fillHeight: true
+          visible: !root.locked
           spacing: Style.spacing.lg
 
           Rectangle {
@@ -1028,6 +1125,87 @@ Panel {
 
         Item {
           Layout.fillWidth: true
+          Layout.fillHeight: true
+          visible: root.locked
+
+          Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - Style.space(40), Style.space(360))
+            spacing: Style.spacing.md
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "\uf023"
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.display
+            }
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "Locked"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.heading
+              font.bold: true
+            }
+
+            Text {
+              width: parent.width
+              text: "Unlock with gpg-agent"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              horizontalAlignment: Text.AlignHCenter
+            }
+
+            Button {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: controller.unlocking ? "Waiting\u2026" : "Unlock"
+              enabled: !controller.unlocking
+              foreground: root.foreground
+              accent: root.accent
+              fontFamily: root.fontFamily
+              bordered: true
+              selected: true
+              onClicked: controller.unlock()
+            }
+
+            Text {
+              width: parent.width
+              visible: controller.unlocking
+              text: "Waiting for passphrase\u2026"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+            }
+
+            Text {
+              width: parent.width
+              visible: controller.lockError !== ""
+              text: controller.lockError
+              color: root.urgent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+              horizontalAlignment: Text.AlignHCenter
+            }
+
+            Text {
+              width: parent.width
+              text: "Your passphrase is handled by gpg-agent and is never stored by HexPass."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+              horizontalAlignment: Text.AlignHCenter
+            }
+          }
+        }
+
+        Item {
+          Layout.fillWidth: true
           Layout.preferredHeight: Math.max(hintText.implicitHeight, gitText.implicitHeight, creditText.implicitHeight)
 
           Text {
@@ -1035,7 +1213,9 @@ Panel {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, parent.width - creditText.width - (gitText.visible ? gitText.width : 0) - Style.spacing.xxl * 2)
-            text: "\u21b5 copy   ^N new   ^G generate   ^S sync   ^D delete"
+            text: root.locked
+              ? "Locked"
+              : "\u21b5 copy   ^N new   ^G generate   ^S sync   ^D delete"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -1140,6 +1320,9 @@ Panel {
         anchors.fill: parent
         opened: root.settingsOpen
         syncOnOpen: root.syncOnOpen
+        autoUnlock: root.autoUnlock
+        autoLockSeconds: root.autoLockSeconds
+        locked: root.locked
         clipboardClear: root.clipboardClear
         genLength: root.genLength
         storePath: controller.storePath
@@ -1159,6 +1342,13 @@ Panel {
           root.refocus()
         }
         onToggleSync: root.toggleSyncOnOpen()
+        onToggleAutoUnlock: root.toggleAutoUnlock()
+        onCycleAutoLock: root.cycleAutoLock()
+        onLockNow: {
+          controller.lock(true)
+          root.settingsOpen = false
+          root.refocus()
+        }
         onCycleClipboard: root.cycleClipboard()
         onCycleLength: root.cycleLength()
         onOpenStore: controller.openStore()

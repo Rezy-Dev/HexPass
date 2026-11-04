@@ -13,6 +13,7 @@ Item {
 
   property string label: ""
   property string startedPath: ""
+  property bool discardStdout: false
   property bool running: proc.running
 
   signal finished(int exitCode, string stdout, string stderr)
@@ -28,7 +29,9 @@ Item {
     _exited = false
     _pendingStdin = payload === undefined || payload === null ? "" : String(payload)
 
-    proc.command = command
+    proc.command = discardStdout
+      ? ["sh", "-c", 'exec "$@" >/dev/null', "sh"].concat(command)
+      : command
     proc.stdinEnabled = _pendingStdin !== ""
     proc.running = true
     return true

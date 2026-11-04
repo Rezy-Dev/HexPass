@@ -9,6 +9,9 @@ Item {
 
   property bool opened: false
   property bool syncOnOpen: false
+  property bool autoUnlock: true
+  property int autoLockSeconds: 900
+  property bool locked: false
   property int clipboardClear: 45
   property int genLength: 24
   property string storePath: ""
@@ -25,6 +28,9 @@ Item {
 
   signal closed()
   signal toggleSync()
+  signal toggleAutoUnlock()
+  signal cycleAutoLock()
+  signal lockNow()
   signal cycleClipboard()
   signal cycleLength()
   signal openStore()
@@ -43,6 +49,15 @@ Item {
 
   function clipboardLabel() {
     return clipboardClear > 0 ? clipboardClear + "s" : "Never"
+  }
+
+  function lockLabel() {
+    if (autoLockSeconds === 0) return "Never"
+    if (autoLockSeconds === 300) return "5 min"
+    if (autoLockSeconds === 900) return "15 min"
+    if (autoLockSeconds === 1800) return "30 min"
+    if (autoLockSeconds === 3600) return "1 hour"
+    return autoLockSeconds + "s"
   }
 
   function gitLabel() {
@@ -76,7 +91,8 @@ Item {
 
     anchors.centerIn: parent
     width: Math.min(parent.width - Style.space(32), Style.space(500))
-    height: content.implicitHeight + card.contentTopInset + card.contentBottomInset
+    height: Math.min(content.implicitHeight + card.contentTopInset + card.contentBottomInset,
+      parent.height - Style.space(8))
     color: Color.popups.background
     borderSpec: Border.flat(Color.popups.border, Style.normalBorderWidth)
     radius: Style.cornerRadius
@@ -84,12 +100,17 @@ Item {
 
     MouseArea { anchors.fill: parent }
 
-    Item {
+    Flickable {
       anchors.fill: parent
       anchors.topMargin: card.contentTopInset
       anchors.rightMargin: card.contentRightInset
       anchors.bottomMargin: card.contentBottomInset
       anchors.leftMargin: card.contentLeftInset
+      contentWidth: width
+      contentHeight: content.implicitHeight
+      clip: true
+      boundsBehavior: Flickable.StopAtBounds
+      interactive: contentHeight > height
 
       Column {
         id: content
@@ -164,6 +185,37 @@ Item {
           label: "Generator length"
           value: String(root.genLength)
           onClicked: root.cycleLength()
+        }
+
+        PanelSeparator { foreground: root.foreground }
+
+        SettingsRow {
+          label: "Unlock on open"
+          value: root.autoUnlock ? "On" : "Off"
+          active: root.autoUnlock
+          onClicked: root.toggleAutoUnlock()
+        }
+
+        SettingsRow {
+          label: "Lock after"
+          value: root.lockLabel()
+          onClicked: root.cycleAutoLock()
+        }
+
+        Text {
+          width: parent.width
+          text: "Passphrase: gpg-agent. HexPass never stores it."
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.WordWrap
+        }
+
+        SettingsRow {
+          label: "Lock now"
+          value: ""
+          visible: !root.locked
+          onClicked: root.lockNow()
         }
 
         PanelSeparator { foreground: root.foreground }

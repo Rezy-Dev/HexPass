@@ -18,7 +18,9 @@ Item {
     text: "\uf084"
     active: root.panel ? root.panel.opened : false
     useActiveColor: false
-    tooltipText: root.panel && root.panel.syncing ? "Syncing\u2026" : "HexPass"
+    tooltipText: root.panel && root.panel.locked
+      ? "HexPass (locked)"
+      : (root.panel && root.panel.syncing ? "Syncing\u2026" : "HexPass")
 
     onPressed: function(button) {
       if (!root.panel) return
