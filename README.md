@@ -47,6 +47,7 @@ gopass uses your normal gpg-agent or age setup.
 ## Notes
 
 - Runs as your user. No sudo.
+- Secrets are sent to `wl-copy` over stdin, never as process arguments.
 - Settings live on the HexPass entry in `~/.config/omarchy/shell.json` and only change when you click a setting.
 - `./install.sh` replaces only `~/.config/omarchy/plugins/rezydev.hexpass`.
 

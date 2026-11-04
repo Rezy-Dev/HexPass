@@ -23,6 +23,7 @@ Item {
 
   function start(command, payload) {
     if (proc.running) return false
+    drainTimer.stop()
     _exitCode = -1
     _exited = false
     _pendingStdin = payload === undefined || payload === null ? "" : String(payload)

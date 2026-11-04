@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import qs.Commons
 import "Model.js" as Model
 
 // Owns every gopass process. The panel asks for data and actions; this file
@@ -278,8 +277,10 @@ Item {
       return false
     }
 
-    Quickshell.execDetached(["bash", "-lc", "printf %s " + Util.shellQuote(text) + " | wl-copy --sensitive"])
+    // Never put the secret in argv. wl-copy reads it from stdin.
     lastClipboard = text
+    pendingClipboardText = text
+    if (!clipboardCopyProc.running) startClipboardCopy()
 
     var seconds = Model.clipboardSeconds(clipboardClearSeconds)
     if (seconds > 0) {
@@ -291,6 +292,13 @@ Item {
 
     notice("Copied " + (label || "value"), false)
     return true
+  }
+
+  function startClipboardCopy() {
+    if (!pendingClipboardText) return
+    var text = pendingClipboardText
+    pendingClipboardText = ""
+    clipboardCopyProc.start(["wl-copy", "--sensitive"], text)
   }
 
   function openEditor(path) {
@@ -332,6 +340,7 @@ Item {
   property var insertCallback: null
   property string insertStartedPath: ""
   property string lastClipboard: ""
+  property string pendingClipboardText: ""
 
   property string detailStartedPath: ""
   property string otpStartedPath: ""
@@ -663,6 +672,28 @@ Item {
     }
   }
 
+  GopassProcess {
+    id: clipboardCopyProc
+
+    onFinished: function(code, output, stderr) {
+      if (root.pendingClipboardText) {
+        root.startClipboardCopy()
+        return
+      }
+      if (code !== 0) root.notice("Could not copy to clipboard", true)
+    }
+  }
+
+  GopassProcess {
+    id: clipboardReadProc
+
+    onFinished: function(code, output, stderr) {
+      if (code === 0 && String(output).replace(/\n$/, "") === root.lastClipboard)
+        Quickshell.execDetached(["wl-copy", "--clear"])
+      root.lastClipboard = ""
+    }
+  }
+
   Timer {
     id: otpTimer
     interval: 1000
@@ -688,9 +719,7 @@ Item {
     repeat: false
     onTriggered: {
       if (!root.lastClipboard) return
-      Quickshell.execDetached(["bash", "-lc", "test \"$(wl-paste -n 2>/dev/null)\" = "
-        + Util.shellQuote(root.lastClipboard) + " && wl-copy --clear"])
-      root.lastClipboard = ""
+      clipboardReadProc.start(["wl-paste", "-n"])
     }
   }
 }
